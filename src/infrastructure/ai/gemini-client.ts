@@ -14,9 +14,23 @@ export interface RoastPromptData {
 export interface IGeminiClient {
   generateHints(targetWord: string): Promise<[string, string, string]>;
   generateRoast(data: RoastPromptData): Promise<string>;
+  generateEmbedding(text: string): Promise<number[]>;
 }
 
 export class MockGeminiClient implements IGeminiClient {
+  async generateEmbedding(text: string): Promise<number[]> {
+    return this.generateDeterministicVector(text);
+  }
+
+  private generateDeterministicVector(text: string): number[] {
+    const vec: number[] = new Array(768).fill(0);
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      vec[i % 768] += Math.sin(code * (i + 1));
+    }
+    return vec;
+  }
+
   async generateHints(targetWord: string): Promise<[string, string, string]> {
     return [
       `A concept associated with the domain of ${targetWord.length}-letter words.`,
@@ -78,6 +92,19 @@ CRITICAL RULES:
       `Often encountered in practical or common scenarios.`,
       `Specifically describes this unique target concept.`,
     ];
+  }
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    try {
+      const embeddingModel = this.genAI.getGenerativeModel({ model: 'text-embedding-004' });
+      const result = await embeddingModel.embedContent(text);
+      if (result?.embedding?.values && result.embedding.values.length > 0) {
+        return result.embedding.values;
+      }
+    } catch (error) {
+      console.warn('⚠️ Gemini embedding API error, using fallback:', error);
+    }
+    return new MockGeminiClient().generateEmbedding(text);
   }
 
   async generateRoast(data: RoastPromptData): Promise<string> {

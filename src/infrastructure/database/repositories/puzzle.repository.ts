@@ -76,8 +76,22 @@ export class PuzzleRepository {
    */
   async findById(id: string) {
     const results = await db
-      .select()
+      .select({
+        id: dailyPuzzles.id,
+        date: dailyPuzzles.date,
+        targetWordId: dailyPuzzles.targetWordId,
+        targetWord: vocabulary.word,
+        targetNormalizedWord: vocabulary.normalizedWord,
+        vocabularyVersion: dailyPuzzles.vocabularyVersion,
+        hint1: dailyPuzzles.hint1,
+        hint2: dailyPuzzles.hint2,
+        hint3: dailyPuzzles.hint3,
+        difficulty: dailyPuzzles.difficulty,
+        status: dailyPuzzles.status,
+        createdAt: dailyPuzzles.createdAt,
+      })
       .from(dailyPuzzles)
+      .innerJoin(vocabulary, eq(dailyPuzzles.targetWordId, vocabulary.id))
       .where(eq(dailyPuzzles.id, id))
       .limit(1);
 
