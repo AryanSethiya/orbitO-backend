@@ -1,4 +1,6 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { db } from '../../../infrastructure/database/index.js';
+import { users } from '../../../infrastructure/database/schema/users.js';
 import { GameSessionRepository } from '../../../infrastructure/database/repositories/game-session.repository.js';
 import { PuzzleRepository } from '../../../infrastructure/database/repositories/puzzle.repository.js';
 import { VocabularyRepository } from '../../../infrastructure/database/repositories/vocabulary.repository.js';
@@ -69,7 +71,21 @@ export const gameRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
     }
 
     // Default anonymous guest user if not authenticated
-    const userId = body.userId || '00000000-0000-0000-0000-000000000000';
+    let userId = body.userId;
+    if (!userId) {
+      const guestId = '00000000-0000-0000-0000-000000000000';
+      // Ensure guest user exists
+      await db
+        .insert(users)
+        .values({
+          id: guestId,
+          email: 'guest@orbito.local',
+          username: 'Guest Explorer',
+          passwordHash: 'guest_no_login_required',
+        })
+        .onConflictDoNothing();
+      userId = guestId;
+    }
 
     const session = await sessionRepo.getOrCreateSession({
       userId,
