@@ -7,8 +7,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export async function runMigrations() {
-  console.log('🔄 Running database migrations...');
+  console.log('🔄 Enabling pgvector extension and running database migrations...');
   try {
+    // Enable pgvector extension
+    await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
+    console.log('✅ pgvector extension enabled.');
+
     const migrationsFolder = join(__dirname, 'migrations');
     await migrate(db, { migrationsFolder });
     console.log('✅ Database migrations applied successfully!');
