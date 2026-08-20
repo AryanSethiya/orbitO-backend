@@ -18,9 +18,7 @@ export async function runMigrations() {
   }
 }
 
-// Enable direct script execution (e.g. for package.json scripts)
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runMigrations()
-    .then(() => pool.end())
-    .catch(() => process.exit(1));
-}
+// Execute migrations
+runMigrations()
+  .then(() => pool.end())
+  .catch(() => process.exit(1));
