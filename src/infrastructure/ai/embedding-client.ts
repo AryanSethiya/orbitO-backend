@@ -57,13 +57,22 @@ export class GoogleEmbeddingClient implements IEmbeddingClient {
     return result.embedding.values;
   }
 
-  async batchEmbedWords(words: string[], chunkSize = 50): Promise<number[][]> {
+  async batchEmbedWords(words: string[], chunkSize = 40): Promise<number[][]> {
     const model = this.genAI.getGenerativeModel({ model: this.modelName });
     const allEmbeddings: number[][] = [];
+
+    let itemsProcessed = 0;
 
     for (let i = 0; i < words.length; i += chunkSize) {
       const chunk = words.slice(i, i + chunkSize);
       
+      // If we are about to exceed 80 items, pause 60 seconds to reset quota
+      if (itemsProcessed > 0 && itemsProcessed + chunk.length > 80) {
+        console.log(`⏳ Approaching 100-word per minute limit (${itemsProcessed} processed). Sleeping 60s for quota reset...`);
+        await new Promise((resolve) => setTimeout(resolve, 60000));
+        itemsProcessed = 0;
+      }
+
       try {
         const batchRequests = chunk.map((text) => ({
           content: { role: 'user', parts: [{ text }] },
@@ -76,10 +85,17 @@ export class GoogleEmbeddingClient implements IEmbeddingClient {
         for (const item of result.embeddings) {
           allEmbeddings.push(item.values);
         }
+
+        itemsProcessed += chunk.length;
+
+        // Small sleep between batches
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       } catch (error: any) {
         // Retry individual words with exponential backoff on 429 rate limit
         console.warn(`⚠️ Batch embedding failed for chunk at index ${i}, falling back to single items:`, error?.message);
         for (const singleWord of chunk) {
+          // Add sleep delay for fallback retries to prevent hammering
+          await new Promise((resolve) => setTimeout(resolve, 4000));
           const singleRes = await this.embedWord(singleWord);
           allEmbeddings.push(singleRes);
         }
