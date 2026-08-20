@@ -70,22 +70,18 @@ export const gameRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
       throw new PuzzleNotFoundError(dateStr);
     }
 
-    // Default anonymous guest user if not authenticated
-    let userId = body.userId;
-    if (!userId) {
-      const guestId = '00000000-0000-0000-0000-000000000000';
-      // Ensure guest user exists
-      await db
-        .insert(users)
-        .values({
-          id: guestId,
-          email: 'guest@orbito.local',
-          username: 'Guest Explorer',
-          passwordHash: 'guest_no_login_required',
-        })
-        .onConflictDoNothing();
-      userId = guestId;
-    }
+    // Ensure user exists in users table to satisfy foreign key constraint
+    let userId = body.userId || '00000000-0000-0000-0000-000000000000';
+    const safeUserSlice = userId.replace(/-/g, '').substring(0, 10);
+    await db
+      .insert(users)
+      .values({
+        id: userId,
+        email: `pilot_${safeUserSlice}@orbito.local`,
+        username: `Pilot_${safeUserSlice}`,
+        passwordHash: 'guest_no_login_required',
+      })
+      .onConflictDoNothing();
 
     const session = await sessionRepo.getOrCreateSession({
       userId,

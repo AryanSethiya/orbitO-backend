@@ -2,6 +2,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../index.js';
 import { gameSessions } from '../schema/game-sessions.js';
 import { guesses } from '../schema/guesses.js';
+import { users } from '../schema/users.js';
 import { vocabulary } from '../schema/vocabulary.js';
 import { getProximitySignal } from '../../../core/services/proximity-classifier.js';
 
@@ -15,6 +16,18 @@ export class GameSessionRepository {
    * Create a new game session or return existing.
    */
   async getOrCreateSession(input: CreateSessionInput) {
+    // 1. Ensure user exists with unique username & email
+    const safeUserSlice = input.userId.replace(/-/g, '').substring(0, 10);
+    await db
+      .insert(users)
+      .values({
+        id: input.userId,
+        email: `pilot_${safeUserSlice}@orbito.local`,
+        username: `Pilot_${safeUserSlice}`,
+        passwordHash: 'guest_no_login_required',
+      })
+      .onConflictDoNothing();
+
     const existing = await this.findByUserAndPuzzle(input.userId, input.puzzleId);
     if (existing) {
       return existing;
