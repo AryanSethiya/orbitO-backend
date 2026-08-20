@@ -53,7 +53,10 @@ export class GoogleEmbeddingClient implements IEmbeddingClient {
 
   async embedWord(word: string): Promise<number[]> {
     const model = this.genAI.getGenerativeModel({ model: this.modelName });
-    const result = await model.embedContent(word);
+    const result = await model.embedContent({
+      content: word,
+      config: { outputDimensionality: 768 },
+    });
     return result.embedding.values;
   }
 
@@ -75,7 +78,8 @@ export class GoogleEmbeddingClient implements IEmbeddingClient {
 
       try {
         const batchRequests = chunk.map((text) => ({
-          content: { role: 'user', parts: [{ text }] },
+          content: text,
+          config: { outputDimensionality: 768 },
         }));
 
         const result = await model.batchEmbedContents({
