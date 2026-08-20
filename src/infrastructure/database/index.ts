@@ -9,7 +9,11 @@ export const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
+  ssl:
+    env.DATABASE_URL.includes('supabase.co') || env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : undefined,
 });
 
 export const db = drizzle(pool, { schema });
