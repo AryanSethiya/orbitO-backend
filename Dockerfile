@@ -16,13 +16,10 @@ ENV HOST=0.0.0.0
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Copy compiled code
+# Copy compiled code and assets
 COPY --from=builder /app/dist ./dist
-
-# Copy migrations files (Drizzle needs the SQL files to migrate in production)
-COPY src/infrastructure/database/migrations ./dist/infrastructure/database/migrations
 
 EXPOSE 3000
 
-# Run migrations and start server
-CMD ["sh", "-c", "node dist/infrastructure/database/migrate.js && node dist/index.js"]
+# Start server directly
+CMD ["node", "dist/index.js"]
