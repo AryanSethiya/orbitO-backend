@@ -21,7 +21,7 @@ const googleAuthSchema = z.object({
 
 const devLoginSchema = z.object({
   callsign: z.string().min(1).max(50),
-  community: z.string().optional().default('Global Explorers'),
+  community: z.string().optional(),
   avatarUrl: z.string().optional(),
 });
 
@@ -99,7 +99,7 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
             name,
             avatarUrl: picture,
             googleId,
-            community: body.community || 'Global Explorers',
+            community: body.community || null,
           })
           .returning();
         userRecord = inserted[0];
@@ -141,7 +141,7 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
           username: userRecord.username,
           name: userRecord.name,
           avatarUrl: userRecord.avatarUrl,
-          community: userRecord.community || 'Global Explorers',
+          community: userRecord.community || null,
         },
         token,
       });
@@ -203,7 +203,7 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
         username: userRecord.username,
         name: userRecord.name,
         avatarUrl: userRecord.avatarUrl,
-        community: userRecord.community || 'Global Explorers',
+        community: userRecord.community || null,
       },
       token,
     });
@@ -235,7 +235,7 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
         username: userRecord.username,
         name: userRecord.name,
         avatarUrl: userRecord.avatarUrl,
-        community: userRecord.community || 'Global Explorers',
+        community: userRecord.community || null,
       });
     } catch {
       return reply.status(401).send({ statusCode: 401, error: 'Unauthorized', message: 'Invalid or expired token' });

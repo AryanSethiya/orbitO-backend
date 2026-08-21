@@ -3,7 +3,7 @@ import path from 'path';
 
 const root = '/Users/aryan.sethiya/Desktop/orbitO frontend';
 
-// 1. LandingAuthView.tsx
+// 1. LandingAuthView.tsx (NO hardcoded email/name)
 const landingAuthCode = `import { useState, type FC } from 'react';
 import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { ApiClient } from '../api/client';
@@ -32,8 +32,8 @@ function parseJwt(token: string) {
 }
 
 export const LandingAuthView: FC<LandingAuthViewProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('aryansethiya111@gmail.com');
-  const [pilotName, setPilotName] = useState('Aryan Sethiya');
+  const [email, setEmail] = useState('');
+  const [pilotName, setPilotName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +48,7 @@ export const LandingAuthView: FC<LandingAuthViewProps> = ({ onLoginSuccess }) =>
       setError(null);
       const payload = parseJwt(credentialResponse.credential);
       const userEmail = payload?.email || email;
-      const userName = payload?.name || payload?.given_name || pilotName;
+      const userName = payload?.name || payload?.given_name || pilotName || 'Orbital Pilot';
       const picture = payload?.picture || \`https://api.dicebear.com/7.x/bottts/svg?seed=\${encodeURIComponent(userName)}\`;
       const googleId = payload?.sub;
 
@@ -178,8 +178,8 @@ export const LandingAuthView: FC<LandingAuthViewProps> = ({ onLoginSuccess }) =>
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="email@gmail.com"
-                className="w-full bg-[#070714] border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-[#eef2ff] placeholder:text-[#8080a0]/30 focus:outline-none focus:border-[#00f0ff] transition-colors"
+                placeholder="pilot@gmail.com"
+                className="w-full bg-[#070714] border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-[#eef2ff] placeholder:text-[#8080a0]/40 focus:outline-none focus:border-[#00f0ff] transition-colors"
               />
             </div>
             <div>
@@ -188,8 +188,8 @@ export const LandingAuthView: FC<LandingAuthViewProps> = ({ onLoginSuccess }) =>
                 type="text"
                 value={pilotName}
                 onChange={(e) => setPilotName(e.target.value)}
-                placeholder="Aryan Sethiya"
-                className="w-full bg-[#070714] border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-[#eef2ff] placeholder:text-[#8080a0]/30 focus:outline-none focus:border-[#00f0ff] transition-colors"
+                placeholder="StarVoyager"
+                className="w-full bg-[#070714] border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-[#eef2ff] placeholder:text-[#8080a0]/40 focus:outline-none focus:border-[#00f0ff] transition-colors"
               />
             </div>
           </div>
@@ -200,8 +200,8 @@ export const LandingAuthView: FC<LandingAuthViewProps> = ({ onLoginSuccess }) =>
             disabled={loading}
             className="w-full mt-1 py-3 px-4 rounded-xl bg-[#00f0ff] text-[#05050c] font-mono text-xs font-bold uppercase tracking-wider hover:shadow-[0_0_25px_rgba(0,240,255,0.45)] active:scale-95 transition-all flex items-center justify-center gap-2"
           >
-            <span>{loading ? 'Initializing Orbit...' : \`Launch as \${pilotName || 'Pilot'}\`}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>{loading ? 'Initializing Orbit...' : (pilotName.trim() ? \`Launch as \${pilotName}\` : 'Launch Mission')}</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </form>
       </div>
@@ -243,247 +243,341 @@ export const LandingAuthView: FC<LandingAuthViewProps> = ({ onLoginSuccess }) =>
 };
 `;
 
-// 2. Updated App.tsx routing !user -> LandingAuthView
-const appCode = `import { useState, useEffect } from 'react';
-import { ApiClient } from './api/client';
-import type { Guess, UserProfile } from './types/game';
-import { Navbar } from './components/Navbar';
-import { LandingAuthView } from './components/LandingAuthView';
-import { DailyOrbitDesktop } from './components/DailyOrbitDesktop';
-import { OrbitSolvedModal } from './components/OrbitSolvedModal';
-import { SpaceStandingsView } from './components/SpaceStandingsView';
-import { AuthModal } from './components/AuthModal';
-import { CommunityModal } from './components/CommunityModal';
+// 2. AuthModal.tsx (NO hardcoded email/name)
+const authModalCode = `import { useState, type FC } from 'react';
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
+import { ApiClient } from '../api/client';
+import type { UserProfile } from '../types/game';
+import { X, Shield, AlertCircle, ArrowRight } from 'lucide-react';
 
-export default function App() {
-  const [currentView, setCurrentView] = useState<'mission' | 'game' | 'leaderboard'>('game');
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [sessionId, setSessionId] = useState<string>('');
-  const [guesses, setGuesses] = useState<Guess[]>([]);
-  const [currentScore, setCurrentScore] = useState<number>(1000);
-  const [solved, setSolved] = useState<boolean>(false);
-  const [unlockedHints, setUnlockedHints] = useState<string[]>([]);
-  const [loadingGuess, setLoadingGuess] = useState<boolean>(false);
-  const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
-  const [isCommunityOpen, setIsCommunityOpen] = useState<boolean>(false);
-  const [isSolvedOpen, setIsSolvedOpen] = useState<boolean>(false);
-  const [activeRoomCode, setActiveRoomCode] = useState<string | null>(null);
+interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onLoginSuccess: (user: UserProfile) => void;
+}
 
-  useEffect(() => {
-    // Restore User Profile if previously logged in
-    const cachedUser = localStorage.getItem('orbito_user');
-    if (cachedUser) {
-      try {
-        const u = JSON.parse(cachedUser);
-        setUser(u);
-        initSession(u.id);
-      } catch {
-        // Unauthenticated -> Landing View
-      }
-    }
-  }, []);
-
-  const initSession = async (userId?: string) => {
-    try {
-      const res = await ApiClient.startSession(userId);
-      setSessionId(res.sessionId);
-      if (res.solved) {
-        setSolved(true);
-      }
-      if (res.score !== undefined) {
-        setCurrentScore(res.score);
-      }
-      if (res.guesses) {
-        setGuesses(res.guesses.map((g: any) => ({
-          id: g.id,
-          word: g.word?.word || g.word,
-          rank: g.rank || 500,
-          similarityScore: g.semanticScore !== undefined ? g.semanticScore : (g.similarityScore !== undefined ? g.similarityScore : (g.rank === 1 ? 1.0 : 0.5)),
-          scoreDelta: g.scoreDelta || -5,
-          createdAt: g.createdAt,
-        })));
-      }
-      if (res.revealedHints) {
-        setUnlockedHints(res.revealedHints);
-      }
-    } catch (err) {
-      console.error('Session init error:', err);
-    }
-  };
-
-  const handleLoginSuccess = (newUser: UserProfile) => {
-    setUser(newUser);
-    initSession(newUser.id);
-    setCurrentView('game');
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('orbito_auth_token');
-    localStorage.removeItem('orbito_user');
-    localStorage.removeItem('orbito_player_id');
-    setUser(null);
-    setActiveRoomCode(null);
-    setGuesses([]);
-    setSolved(false);
-    setUnlockedHints([]);
-  };
-
-  const handleSubmitGuess = async (word: string) => {
-    if (!sessionId) return;
-    try {
-      setLoadingGuess(true);
-      const res: any = await ApiClient.submitGuess(sessionId, word);
-      
-      const newGuess: Guess = {
-        word: res.word || word,
-        rank: res.rank || 500,
-        similarityScore: res.semanticScore !== undefined ? res.semanticScore : (res.similarityScore || 0.5),
-        scoreDelta: -5,
-        createdAt: new Date().toISOString(),
-      };
-
-      setGuesses((prev) => [...prev, newGuess]);
-      if (res.scoreBreakdown?.finalScore !== undefined) {
-        setCurrentScore(res.scoreBreakdown.finalScore);
-      } else {
-        setCurrentScore((prev) => Math.max(0, prev - 5));
-      }
-
-      if (res.isSolved || res.rank === 1) {
-        setSolved(true);
-        setIsSolvedOpen(true);
-      }
-    } catch (err: any) {
-      console.warn('Guess error:', err.message);
-    } finally {
-      setLoadingGuess(false);
-    }
-  };
-
-  const handleRequestHint = async () => {
-    if (!sessionId) return;
-    try {
-      const res: any = await ApiClient.requestHint(sessionId);
-      if (res.revealedHints && Array.isArray(res.revealedHints)) {
-        setUnlockedHints(res.revealedHints);
-      } else if (res.hintText) {
-        setUnlockedHints((prev) => (prev.includes(res.hintText) ? prev : [...prev, res.hintText]));
-      } else if (res.session?.revealedHints) {
-        setUnlockedHints(res.session.revealedHints);
-      }
-
-      if (res.session?.score !== undefined) {
-        setCurrentScore(res.session.score);
-      } else if (res.penaltyCost) {
-        setCurrentScore((prev) => Math.max(0, prev - res.penaltyCost));
-      }
-    } catch (err: any) {
-      console.warn('Hint request note:', err?.message || err);
-    }
-  };
-
-  const handleRoomJoined = (room: { id: string; code: string; name: string }) => {
-    setActiveRoomCode(room.code);
-    if (user) {
-      const updatedUser = { ...user, community: room.name };
-      setUser(updatedUser);
-      localStorage.setItem('orbito_user', JSON.stringify(updatedUser));
-    }
-  };
-
-  // If user is not authenticated, show Landing Sign-In Page
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#05050c] text-[#eef2ff] font-sans relative overflow-x-hidden selection:bg-[#00f0ff] selection:text-[#05050c]">
-        {/* Dynamic Starfield Background */}
-        <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-[#00f0ff]/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/3 w-96 h-96 bg-[#ff5e07]/5 rounded-full blur-3xl" />
-        </div>
-
-        <LandingAuthView onLoginSuccess={handleLoginSuccess} />
-      </div>
+function parseJwt(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
     );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
   }
+}
+
+export const AuthModal: FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
+  const [email, setEmail] = useState('');
+  const [pilotName, setPilotName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      setError('Google Sign-In did not return a valid credential.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const payload = parseJwt(credentialResponse.credential);
+      const userEmail = payload?.email || email;
+      const userName = payload?.name || payload?.given_name || pilotName || 'Orbital Pilot';
+      const picture = payload?.picture || \`https://api.dicebear.com/7.x/bottts/svg?seed=\${encodeURIComponent(userName)}\`;
+      const googleId = payload?.sub;
+
+      const res = await ApiClient.loginWithGoogle({
+        credential: credentialResponse.credential,
+        email: userEmail,
+        name: userName,
+        picture,
+        googleId,
+      });
+
+      localStorage.setItem('orbito_auth_token', res.token);
+      localStorage.setItem('orbito_user', JSON.stringify(res.user));
+      localStorage.setItem('orbito_player_id', res.user.id);
+      onLoginSuccess(res.user);
+      onClose();
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      setError(err.message || 'Google authentication failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDirectGoogleLogin = async () => {
+    if (!email.trim()) {
+      setError('Please enter your Google email.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const name = pilotName.trim() || email.split('@')[0];
+      const picture = \`https://api.dicebear.com/7.x/bottts/svg?seed=\${encodeURIComponent(name)}\`;
+
+      const res = await ApiClient.loginWithGoogle({
+        email: email.trim().toLowerCase(),
+        name,
+        picture,
+      });
+
+      localStorage.setItem('orbito_auth_token', res.token);
+      localStorage.setItem('orbito_user', JSON.stringify(res.user));
+      localStorage.setItem('orbito_player_id', res.user.id);
+      onLoginSuccess(res.user);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#05050c] text-[#eef2ff] font-sans relative overflow-x-hidden selection:bg-[#00f0ff] selection:text-[#05050c]">
-      {/* Dynamic Starfield Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-[#00f0ff]/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/3 w-96 h-96 bg-[#ff5e07]/5 rounded-full blur-3xl" />
+    <div className="fixed inset-0 bg-[#05050c]/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md stitch-card rounded-3xl p-6 sm:p-8 border border-white/10 relative shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-5 top-5 text-[#8080a0] hover:text-[#eef2ff] transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-full bg-[#00f0ff]/20 border border-[#00f0ff] flex items-center justify-center">
+            <Shield className="w-5 h-5 text-[#00f0ff]" />
+          </div>
+          <div>
+            <h2 className="font-mono text-lg font-bold text-[#eef2ff]">Pilot Authentication</h2>
+            <p className="font-mono text-[10px] text-[#00f0ff] uppercase tracking-wider">Google OAuth 2.0 Access</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-3 mb-4 rounded-xl bg-[#ff5e07]/10 border border-[#ff5e07]/30 text-xs font-mono text-[#ff5e07] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* 1. Official Google Sign In Button */}
+        <div className="w-full flex flex-col items-center justify-center mb-4 bg-[#0c0c1f] p-4 rounded-2xl border border-[#00f0ff]/20">
+          <label className="font-mono text-[10px] text-[#00f0ff] uppercase block mb-3 font-bold tracking-wider">
+            Sign in with Google Account
+          </label>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError('Google Sign-In prompt closed or failed.')}
+            theme="filled_black"
+            shape="pill"
+            size="large"
+            text="continue_with"
+            width="100%"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 my-4">
+          <div className="h-[1px] flex-1 bg-white/10" />
+          <span className="font-mono text-[10px] text-[#8080a0] uppercase">Or Quick Launch with Callsign</span>
+          <div className="h-[1px] flex-1 bg-white/10" />
+        </div>
+
+        {/* Callsign / Direct Sign-In fallback */}
+        <div className="flex flex-col gap-3 text-left">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="font-mono text-[9px] text-[#8080a0] uppercase block mb-1 font-semibold">Google Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="pilot@gmail.com"
+                className="w-full bg-[#070714] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-[#eef2ff] placeholder:text-[#8080a0]/40 focus:outline-none focus:border-[#00f0ff]"
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[9px] text-[#8080a0] uppercase block mb-1 font-semibold">Pilot Callsign</label>
+              <input
+                type="text"
+                value={pilotName}
+                onChange={(e) => setPilotName(e.target.value)}
+                placeholder="StarVoyager"
+                className="w-full bg-[#070714] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-[#eef2ff] placeholder:text-[#8080a0]/40 focus:outline-none focus:border-[#00f0ff]"
+              />
+            </div>
+          </div>
+
+          <button
+            id="launch-auth-btn"
+            onClick={handleDirectGoogleLogin}
+            disabled={loading}
+            className="w-full py-3 px-4 rounded-xl bg-[#00f0ff] text-[#05050c] font-mono text-xs font-bold uppercase tracking-wider active:scale-95 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all flex items-center justify-center gap-2"
+          >
+            <span>{loading ? 'Authenticating...' : (pilotName.trim() ? \`Launch as \${pilotName}\` : 'Launch Mission')}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
-
-      <Navbar
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        user={user}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onOpenCommunity={() => setIsCommunityOpen(true)}
-        onLogout={handleLogout}
-        activeRoomCode={activeRoomCode}
-      />
-
-      <main className="relative z-10">
-        {currentView === 'game' && (
-          <DailyOrbitDesktop
-            guesses={guesses}
-            currentScore={currentScore}
-            solved={solved}
-            unlockedHints={unlockedHints}
-            onSubmitGuess={handleSubmitGuess}
-            onRequestHint={handleRequestHint}
-            onShowRoast={() => setIsSolvedOpen(true)}
-            onOpenStandings={() => setCurrentView('leaderboard')}
-            user={user}
-            loadingGuess={loadingGuess}
-          />
-        )}
-
-        {currentView === 'leaderboard' && (
-          <SpaceStandingsView
-            user={user}
-            onOpenCommunity={() => setIsCommunityOpen(true)}
-            activeRoomCode={activeRoomCode}
-          />
-        )}
-      </main>
-
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-      />
-
-      <CommunityModal
-        isOpen={isCommunityOpen}
-        onClose={() => setIsCommunityOpen(false)}
-        user={user}
-        onRoomJoined={handleRoomJoined}
-        onRequireAuth={() => {
-          setIsCommunityOpen(false);
-          setIsAuthOpen(true);
-        }}
-      />
-
-      <OrbitSolvedModal
-        isOpen={isSolvedOpen}
-        onClose={() => setIsSolvedOpen(false)}
-        onOpenStandings={() => {
-          setIsSolvedOpen(false);
-          setCurrentView('leaderboard');
-        }}
-        sessionId={sessionId || ''}
-        finalScore={currentScore}
-        guessesCount={guesses.length}
-        targetWord={guesses.find((g) => g.rank === 1)?.word || 'GALAXY'}
-      />
     </div>
   );
+};
+`;
+
+// 3. Navbar.tsx (Displays + Create / Join Room when not in custom room)
+const navbarCode = `import type { FC } from 'react';
+import type { UserProfile } from '../types/game';
+import { Users, LogIn, LogOut, PlusCircle } from 'lucide-react';
+
+interface NavbarProps {
+  currentView: 'mission' | 'game' | 'leaderboard';
+  setCurrentView: (view: 'mission' | 'game' | 'leaderboard') => void;
+  user: UserProfile | null;
+  onOpenAuth: () => void;
+  onOpenCommunity: () => void;
+  onLogout: () => void;
+  activeRoomCode?: string | null;
 }
+
+export const Navbar: FC<NavbarProps> = ({
+  currentView,
+  setCurrentView,
+  user,
+  onOpenAuth,
+  onOpenCommunity,
+  onLogout,
+  activeRoomCode,
+}) => {
+  const hasCustomRoom = user?.community && user.community !== 'Global Explorers' && user.community !== 'Starfleet Academy';
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-40 bg-[#05050c]/80 backdrop-blur-xl border-b border-white/10 px-4 sm:px-8 py-3 flex items-center justify-between">
+      {/* Brand Logo */}
+      <div 
+        onClick={() => setCurrentView('game')}
+        className="flex items-center gap-3 cursor-pointer group"
+      >
+        <img 
+          src="/logo.png" 
+          alt="oRBITO Logo" 
+          className="h-9 w-auto object-contain filter drop-shadow-[0_0_12px_rgba(0,240,255,0.6)] group-hover:scale-105 transition-all duration-300"
+          onError={(e) => {
+            (e.currentTarget as HTMLElement).style.display = 'none';
+          }}
+        />
+        <div className="flex flex-col">
+          <span className="font-mono text-xs text-[#00f0ff] uppercase tracking-widest font-bold">Orbito</span>
+          <span className="font-mono text-[9px] text-[#8080a0] tracking-wider">Semantic Orbit</span>
+        </div>
+      </div>
+
+      {/* Navigation Center Tabs */}
+      <nav className="flex items-center gap-1 sm:gap-2 bg-white/5 p-1 rounded-2xl border border-white/10">
+        <button
+          onClick={() => setCurrentView('game')}
+          className={\`px-3 sm:px-4 py-1.5 rounded-xl font-mono text-xs font-semibold uppercase tracking-wider transition-all \${
+            currentView === 'game'
+              ? 'bg-[#00f0ff] text-[#05050c] shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+              : 'text-[#8080a0] hover:text-[#eef2ff]'
+          }\`}
+        >
+          Daily Orbit
+        </button>
+
+        <button
+          onClick={() => setCurrentView('leaderboard')}
+          className={\`px-3 sm:px-4 py-1.5 rounded-xl font-mono text-xs font-semibold uppercase tracking-wider transition-all \${
+            currentView === 'leaderboard'
+              ? 'bg-[#00f0ff] text-[#05050c] shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+              : 'text-[#8080a0] hover:text-[#eef2ff]'
+          }\`}
+        >
+          Standings
+        </button>
+      </nav>
+
+      {/* User Actions / Room Control */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          id="fleet-rooms-btn"
+          onClick={onOpenCommunity}
+          className={\`px-3 py-1.5 rounded-xl font-mono text-xs transition-all flex items-center gap-1.5 \${
+            hasCustomRoom || activeRoomCode
+              ? 'bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-[#00f0ff] hover:bg-[#00f0ff]/20 shadow-[0_0_10px_rgba(0,240,255,0.15)]'
+              : 'bg-white/5 border border-white/15 text-[#8080a0] hover:text-[#00f0ff] hover:border-[#00f0ff]/30'
+          }\`}
+        >
+          {hasCustomRoom || activeRoomCode ? (
+            <>
+              <Users className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline font-bold">
+                {activeRoomCode ? \`Room \${activeRoomCode}\` : user?.community}
+              </span>
+              <span className="sm:hidden font-bold">
+                {activeRoomCode || 'Fleet'}
+              </span>
+            </>
+          ) : (
+            <>
+              <PlusCircle className="w-3.5 h-3.5 text-[#00f0ff]" />
+              <span className="hidden sm:inline font-bold">+ Create / Join Room</span>
+              <span className="sm:hidden font-bold">+ Room</span>
+            </>
+          )}
+        </button>
+
+        {user ? (
+          <div className="flex items-center gap-2.5 bg-[#0c0c1f] px-3 py-1.5 rounded-2xl border border-white/15">
+            <img
+              src={user.avatarUrl || \`https://api.dicebear.com/7.x/bottts/svg?seed=\${encodeURIComponent(user.name || user.email || 'pilot')}\`}
+              alt="Pilot Avatar"
+              className="w-6 h-6 rounded-full border border-[#00f0ff]/50 bg-black/40 object-cover"
+            />
+            <div className="hidden md:flex flex-col text-left">
+              <span className="font-mono text-xs font-bold text-[#eef2ff] leading-none">{user.name || 'Pilot'}</span>
+              <span className="font-mono text-[9px] text-[#00f0ff] leading-none mt-0.5">
+                {hasCustomRoom ? user?.community : 'Solo Pilot'}
+              </span>
+            </div>
+            <button
+              onClick={onLogout}
+              title="Sign Out"
+              className="text-[#8080a0] hover:text-[#ff5e07] transition-colors ml-1"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            id="sign-in-nav-btn"
+            onClick={onOpenAuth}
+            className="px-3.5 py-1.5 rounded-xl bg-[#00f0ff] text-[#05050c] font-mono text-xs font-bold uppercase tracking-wider hover:shadow-[0_0_15px_rgba(0,240,255,0.5)] transition-all flex items-center gap-1.5 active:scale-95"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
+          </button>
+        )}
+      </div>
+    </header>
+  );
+};
 `;
 
 fs.writeFileSync(path.join(root, 'src/components/LandingAuthView.tsx'), landingAuthCode.trim());
-fs.writeFileSync(path.join(root, 'src/App.tsx'), appCode.trim());
+fs.writeFileSync(path.join(root, 'src/components/AuthModal.tsx'), authModalCode.trim());
+fs.writeFileSync(path.join(root, 'src/components/Navbar.tsx'), navbarCode.trim());
 
-console.log('✅ Created LandingAuthView and updated App.tsx landing flow!');
+console.log('✅ Applied all clean frontend updates!');

@@ -2,6 +2,7 @@ import { GameSessionRepository } from '../../infrastructure/database/repositorie
 import { PuzzleRepository } from '../../infrastructure/database/repositories/puzzle.repository.js';
 import { AIRoastRepository } from '../../infrastructure/database/repositories/ai-roast.repository.js';
 import { IGeminiClient } from '../../infrastructure/ai/gemini-client.js';
+import { redis } from '../../infrastructure/cache/redis.js';
 import { SessionNotFoundError, GameNotSolvedError } from '../../core/errors/domain-errors.js';
 
 export interface GenerateRoastCommand {
@@ -34,9 +35,27 @@ export class GenerateRoastUseCase {
       throw new GameNotSolvedError();
     }
 
-    // 1. Return cached roast if already generated
+    const redisKey = `roast:${session.id}`;
+
+    // 1. Check ultra-fast Redis cache first
+    try {
+      const cachedInRedis = await redis.get(redisKey);
+      if (cachedInRedis) {
+        return {
+          sessionId: session.id,
+          roastText: cachedInRedis,
+          roastStyle: command.style || 'savage',
+          cached: true,
+        };
+      }
+    } catch {}
+
+    // 2. Return cached roast from DB if already generated
     const existing = await this.roastRepo.findBySessionId(session.id);
     if (existing) {
+      try {
+        await redis.setex(redisKey, 86400, existing.roastText);
+      } catch {}
       return {
         sessionId: session.id,
         roastText: existing.roastText,
@@ -59,12 +78,16 @@ export class GenerateRoastUseCase {
       style: command.style || 'balanced',
     });
 
-    // 4. Persist to DB
+    // 4. Persist to DB and Redis
     const saved = await this.roastRepo.saveRoast({
       gameSessionId: session.id,
       roastText,
-      roastStyle: command.style || 'balanced',
+      roastStyle: command.style || 'savage',
     });
+
+    try {
+      await redis.setex(redisKey, 86400, saved.roastText);
+    } catch {}
 
     return {
       sessionId: session.id,
