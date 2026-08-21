@@ -22,7 +22,7 @@ async function runAutonomousTest() {
   const page = await browser.newPage();
   
   page.on('console', (msg) => console.log('  [BROWSER CONSOLE]', msg.type(), msg.text()));
-  page.on('pageerror', (err) => console.log('  [BROWSER ERROR]', err.message));
+  page.on('pageerror', (err: any) => console.log('  [BROWSER ERROR]', err?.message || err));
 
   // 1. Mission Control Screen
   console.log('📡 Navigating to http://localhost:5173...');
@@ -82,7 +82,7 @@ async function runAutonomousTest() {
   // Submit Target Word to solve!
   const todayTarget = 'galaxy';
   console.log(`🎯 Entering center target word: "${todayTarget}"...`);
-  await page.click(inputSelector, { clickCount: 3 });
+  await page.click(inputSelector, { count: 3 });
   await page.keyboard.press('Backspace');
   await page.type(inputSelector, todayTarget);
   await page.keyboard.press('Enter');

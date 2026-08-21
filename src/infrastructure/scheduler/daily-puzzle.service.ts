@@ -52,7 +52,7 @@ export class DailyPuzzleService {
         .values({
           word: targetWord,
           normalizedWord: normalized,
-          vectorEmbedding: [],
+          embedding: [],
         })
         .onConflictDoNothing()
         .returning();

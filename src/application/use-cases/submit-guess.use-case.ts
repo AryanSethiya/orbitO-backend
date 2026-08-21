@@ -124,7 +124,7 @@ export class SubmitGuessUseCase {
         .values({
           word: command.guess.trim(),
           normalizedWord: normalized,
-          vectorEmbedding: [],
+          embedding: [],
         })
         .onConflictDoNothing()
         .returning();
