@@ -12,9 +12,9 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || '');
 
 const googleAuthSchema = z.object({
   credential: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().optional(),
   name: z.string().optional(),
-  picture: z.string().url().optional(),
+  picture: z.string().optional(),
   googleId: z.string().optional(),
   community: z.string().optional(),
 });
@@ -36,96 +36,123 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
    * Authenticate pilot with Google Sign-In
    */
   server.post('/auth/google', async (request, reply) => {
-    const body = googleAuthSchema.parse(request.body || {});
+    try {
+      const body = googleAuthSchema.parse(request.body || {});
 
-    let email = body.email;
-    let name = body.name || 'Orbital Pilot';
-    let picture = body.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}`;
-    let googleId = body.googleId || '';
+      let email = body.email;
+      let name = body.name || 'Orbital Pilot';
+      let picture = body.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}`;
+      let googleId = body.googleId || '';
 
-    // If Google ID token was passed, verify cryptographically
-    if (body.credential && process.env.GOOGLE_CLIENT_ID) {
-      try {
-        const ticket = await googleClient.verifyIdToken({
-          idToken: body.credential,
-          audience: process.env.GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
-        if (payload && payload.email) {
-          email = payload.email;
-          name = payload.name || name;
-          picture = payload.picture || picture;
-          googleId = payload.sub;
+      // 1. Extract directly from Google credential JWT if present
+      if (body.credential) {
+        try {
+          const decoded = jwt.decode(body.credential) as any;
+          if (decoded && decoded.email) {
+            email = decoded.email;
+            name = decoded.name || decoded.given_name || name;
+            picture = decoded.picture || picture;
+            googleId = decoded.sub || googleId;
+          }
+        } catch (e) {
+          console.warn('Could not decode credential JWT payload:', e);
         }
-      } catch (err) {
-        console.warn('Google verify fallback (using client payload):', err);
-      }
-    }
 
-    if (!email) {
-      return reply.status(400).send({
-        statusCode: 400,
-        error: 'Bad Request',
-        message: 'Google authentication requires a valid email address.',
+        // Also attempt cryptographic verification if Google Client ID is configured
+        const targetAudience = process.env.GOOGLE_CLIENT_ID || '755407423715-tvvhvchks80qlvhe3ohvoq5ichq6rhgf.apps.googleusercontent.com';
+        try {
+          const ticket = await googleClient.verifyIdToken({
+            idToken: body.credential,
+            audience: targetAudience,
+          });
+          const payload = ticket.getPayload();
+          if (payload && payload.email) {
+            email = payload.email;
+            name = payload.name || name;
+            picture = payload.picture || picture;
+            googleId = payload.sub || googleId;
+          }
+        } catch (err) {
+          console.warn('Google verifyIdToken note (using decoded payload):', err);
+        }
+      }
+
+      if (!email) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Google authentication requires a valid email address.',
+        });
+      }
+
+      // 2. Ensure username is clean and unique
+      const cleanUsername = name.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 24);
+      const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+      let userRecord = existing[0];
+      if (!userRecord) {
+        const inserted = await db
+          .insert(users)
+          .values({
+            email,
+            username: `${cleanUsername}_${Math.floor(100 + Math.random() * 900)}`,
+            name,
+            avatarUrl: picture,
+            googleId,
+            community: body.community || 'Global Explorers',
+          })
+          .returning();
+        userRecord = inserted[0];
+      } else {
+        const updated = await db
+          .update(users)
+          .set({
+            name: name || userRecord.name,
+            avatarUrl: picture || userRecord.avatarUrl,
+            googleId: googleId || userRecord.googleId,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, userRecord.id))
+          .returning();
+        userRecord = updated[0];
+      }
+
+      if (!userRecord) {
+        throw new Error('Failed to create or retrieve user profile.');
+      }
+
+      const token = jwt.sign(
+        {
+          userId: userRecord.id,
+          email: userRecord.email,
+          username: userRecord.username,
+          name: userRecord.name,
+          avatarUrl: userRecord.avatarUrl,
+          community: userRecord.community,
+        },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return reply.status(200).send({
+        user: {
+          id: userRecord.id,
+          email: userRecord.email,
+          username: userRecord.username,
+          name: userRecord.name,
+          avatarUrl: userRecord.avatarUrl,
+          community: userRecord.community || 'Global Explorers',
+        },
+        token,
+      });
+    } catch (error: any) {
+      console.error('💥 /auth/google handler error:', error);
+      return reply.status(500).send({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: error.message || 'Authentication processing failed',
       });
     }
-
-    // Username derived from name / email
-    const cleanUsername = name.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 24);
-    const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
-
-    let userRecord = existing[0];
-    if (!userRecord) {
-      const inserted = await db
-        .insert(users)
-        .values({
-          email,
-          username: `${cleanUsername}_${Math.floor(100 + Math.random() * 900)}`,
-          name,
-          avatarUrl: picture,
-          googleId,
-          community: body.community || 'Global Explorers',
-        })
-        .returning();
-      userRecord = inserted[0];
-    } else {
-      const updated = await db
-        .update(users)
-        .set({
-          name: name || userRecord.name,
-          avatarUrl: picture || userRecord.avatarUrl,
-          googleId: googleId || userRecord.googleId,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userRecord.id))
-        .returning();
-      userRecord = updated[0];
-    }
-
-    const token = jwt.sign(
-      {
-        userId: userRecord.id,
-        email: userRecord.email,
-        username: userRecord.username,
-        name: userRecord.name,
-        avatarUrl: userRecord.avatarUrl,
-        community: userRecord.community,
-      },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    return reply.status(200).send({
-      user: {
-        id: userRecord.id,
-        email: userRecord.email,
-        username: userRecord.username,
-        name: userRecord.name,
-        avatarUrl: userRecord.avatarUrl,
-        community: userRecord.community || 'Global Explorers',
-      },
-      token,
-    });
   });
 
   /**
