@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { createHash } from 'crypto';
 import { db } from '../../../infrastructure/database/index.js';
 import { users } from '../../../infrastructure/database/schema/users.js';
 import { GameSessionRepository } from '../../../infrastructure/database/repositories/game-session.repository.js';
@@ -82,8 +83,15 @@ export const gameRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
     }
 
     // Ensure user exists in users table to satisfy foreign key constraint
-    let userId = body.userId || '00000000-0000-0000-0000-000000000000';
-    const safeUserSlice = userId.replace(/-/g, '').substring(0, 10);
+    const rawUserId = body.userId || '00000000-0000-0000-0000-000000000000';
+    let userId = rawUserId;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(rawUserId)) {
+      const hash = createHash('sha256').update(rawUserId).digest('hex');
+      userId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    }
+
+    const safeUserSlice = rawUserId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
     await db
       .insert(users)
       .values({
