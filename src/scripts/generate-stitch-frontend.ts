@@ -1,186 +1,191 @@
-import fs from 'fs';
-import path from 'path';
-
-const root = '/Users/aryan.sethiya/Desktop/orbitO frontend';
-
-const spaceStandingsCode = `import { useState, useEffect, type FC } from 'react';
-import type { LeaderboardEntry, UserProfile } from '../types/game';
+import { useState, type FC } from 'react';
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { ApiClient } from '../api/client';
-import { RefreshCw, Users, KeyRound, Trophy } from 'lucide-react';
+import type { UserProfile } from '../types/game';
+import { X, Shield, AlertCircle, ArrowRight } from 'lucide-react';
 
-interface SpaceStandingsViewProps {
-  user: UserProfile | null;
-  onOpenCommunity: () => void;
-  activeRoomCode?: string | null;
+interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onLoginSuccess: (user: UserProfile) => void;
 }
 
-export const SpaceStandingsView: FC<SpaceStandingsViewProps> = ({
-  user,
-  onOpenCommunity,
-  activeRoomCode,
-}) => {
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<string>(activeRoomCode ? 'Room' : 'Global');
-  const [loading, setLoading] = useState(true);
+function parseJwt(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    if (activeRoomCode) {
-      setActiveTab('Room');
+export const AuthModal: FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
+  const [email, setEmail] = useState('aryansethiya111@gmail.com');
+  const [pilotName, setPilotName] = useState('Aryan Sethiya');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      setError('Google Sign-In did not return a valid credential.');
+      return;
     }
-  }, [activeRoomCode]);
 
-  useEffect(() => {
-    loadStandings(activeTab);
-  }, [activeTab, activeRoomCode]);
-
-  const loadStandings = async (tab: string) => {
     try {
       setLoading(true);
-      const roomFilter = tab === 'Room' && activeRoomCode ? activeRoomCode : undefined;
-      const res = await ApiClient.getLeaderboard({ roomCode: roomFilter });
-      setEntries(res.leaderboard || []);
-    } catch (err) {
-      console.error('Error loading leaderboard:', err);
+      setError(null);
+      const payload = parseJwt(credentialResponse.credential);
+      const userEmail = payload?.email || email;
+      const userName = payload?.name || payload?.given_name || pilotName;
+      const picture = payload?.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userName)}`;
+      const googleId = payload?.sub;
+
+      const res = await ApiClient.loginWithGoogle({
+        credential: credentialResponse.credential,
+        email: userEmail,
+        name: userName,
+        picture,
+        googleId,
+      });
+
+      localStorage.setItem('orbito_auth_token', res.token);
+      localStorage.setItem('orbito_user', JSON.stringify(res.user));
+      localStorage.setItem('orbito_player_id', res.user.id);
+      onLoginSuccess(res.user);
+      onClose();
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      setError(err.message || 'Google authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const currentCommunityName = user?.community && user.community !== 'Global Explorers'
-    ? user.community
-    : activeRoomCode
-    ? \`Room \${activeRoomCode}\`
-    : null;
+  const handleDirectGoogleLogin = async () => {
+    if (!email.trim()) {
+      setError('Please enter a valid Google email.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const name = pilotName.trim() || email.split('@')[0];
+      const picture = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}`;
+
+      const res = await ApiClient.loginWithGoogle({
+        email: email.trim().toLowerCase(),
+        name,
+        picture,
+      });
+
+      localStorage.setItem('orbito_auth_token', res.token);
+      localStorage.setItem('orbito_user', JSON.stringify(res.user));
+      localStorage.setItem('orbito_player_id', res.user.id);
+      onLoginSuccess(res.user);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 pt-24 pb-16 text-center">
-      <div className="mb-8">
-        <h1 className="font-mono text-2xl sm:text-4xl font-black text-[#eef2ff] uppercase tracking-wider">
-          Space Standings
-        </h1>
-        <p className="font-mono text-xs text-[#00f0ff] uppercase tracking-widest mt-1 font-bold">
-          Real-Time Leaderboards // Today's Orbit
-        </p>
-      </div>
-
-      {/* Clean Tab Switcher: Global & User's Custom Community Room */}
-      <div className="flex flex-wrap items-center justify-center gap-2.5 mb-8">
+    <div className="fixed inset-0 bg-[#05050c]/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md stitch-card rounded-3xl p-6 sm:p-8 border border-white/10 relative shadow-2xl">
         <button
-          onClick={() => setActiveTab('Global')}
-          className={\`px-5 py-2.5 rounded-2xl font-mono text-xs font-bold uppercase transition-all flex items-center gap-2 \${
-            activeTab === 'Global'
-              ? 'bg-[#00f0ff] text-[#05050c] shadow-[0_0_20px_rgba(0,240,255,0.4)]'
-              : 'bg-[#070714] text-[#8080a0] hover:text-[#eef2ff] border border-white/10'
-          }\`}
+          onClick={onClose}
+          className="absolute right-5 top-5 text-[#8080a0] hover:text-[#eef2ff] transition-colors"
         >
-          <span>🌐 Global Standings</span>
+          <X className="w-5 h-5" />
         </button>
 
-        {currentCommunityName && (
-          <button
-            onClick={() => setActiveTab('Room')}
-            className={\`px-5 py-2.5 rounded-2xl font-mono text-xs font-bold uppercase transition-all flex items-center gap-2 \${
-              activeTab === 'Room'
-                ? 'bg-[#00f0ff] text-[#05050c] shadow-[0_0_20px_rgba(0,240,255,0.4)]'
-                : 'bg-[#070714] text-[#00f0ff] hover:text-[#eef2ff] border border-[#00f0ff]/30'
-            }\`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>🛸 \${currentCommunityName}</span>
-          </button>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-full bg-[#00f0ff]/20 border border-[#00f0ff] flex items-center justify-center">
+            <Shield className="w-5 h-5 text-[#00f0ff]" />
+          </div>
+          <div>
+            <h2 className="font-mono text-lg font-bold text-[#eef2ff]">Pilot Authentication</h2>
+            <p className="font-mono text-[10px] text-[#00f0ff] uppercase tracking-wider">Google OAuth 2.0 Access</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-3 mb-4 rounded-xl bg-[#ff5e07]/10 border border-[#ff5e07]/30 text-xs font-mono text-[#ff5e07] flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
         )}
 
-        <button
-          onClick={onOpenCommunity}
-          className="px-4 py-2.5 rounded-2xl bg-white/5 border border-white/15 text-[#8080a0] hover:text-[#00f0ff] hover:border-[#00f0ff]/40 font-mono text-xs font-bold uppercase transition-all flex items-center gap-2"
-        >
-          <KeyRound className="w-3.5 h-3.5 text-[#00f0ff]" />
-          <span>{currentCommunityName ? 'Switch / Join Room' : '+ Join / Create Community Room'}</span>
-        </button>
-      </div>
+        {/* 1. Official Google Sign In Button */}
+        <div className="w-full flex flex-col items-center justify-center mb-4 bg-[#0c0c1f] p-4 rounded-2xl border border-[#00f0ff]/20">
+          <label className="font-mono text-[10px] text-[#00f0ff] uppercase block mb-3 font-bold tracking-wider">
+            Sign in with Google Account
+          </label>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError('Google Sign-In prompt closed or failed.')}
+            theme="filled_black"
+            shape="pill"
+            size="large"
+            text="continue_with"
+            width="100%"
+          />
+        </div>
 
-      <div className="stitch-card rounded-3xl p-4 sm:p-6 border border-white/10 text-left overflow-x-auto shadow-2xl">
-        <table className="w-full font-mono text-xs">
-          <thead>
-            <tr className="border-b border-white/10 text-[#8080a0] uppercase text-[10px]">
-              <th className="py-3 px-3 text-left">Rank</th>
-              <th className="py-3 px-3 text-left">Pilot</th>
-              <th className="py-3 px-3 text-left">Community Fleet</th>
-              <th className="py-3 px-3 text-center">Probes</th>
-              <th className="py-3 px-3 text-right">Final Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="py-16 text-center text-[#8080a0]">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#00f0ff]" />
-                </td>
-              </tr>
-            ) : entries.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-16 text-center text-[#8080a0]">
-                  <div className="max-w-sm mx-auto flex flex-col items-center gap-2">
-                    <Trophy className="w-8 h-8 text-[#8080a0]/40" />
-                    <p className="font-bold text-[#eef2ff]">No Pilots Ranked Yet</p>
-                    <p className="text-[11px] text-[#8080a0]">Be the first astronaut to solve today's orbit in this leaderboard!</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              entries.map((entry, idx) => (
-                <tr
-                  key={entry.userId || idx}
-                  className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                >
-                  <td className="py-3.5 px-3">
-                    <span className={\`font-black \${
-                      idx === 0
-                        ? 'text-[#00ff88]'
-                        : idx === 1
-                        ? 'text-[#00f0ff]'
-                        : idx === 2
-                        ? 'text-[#ffaa00]'
-                        : 'text-[#8080a0]'
-                    }\`}>
-                      {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : \`#\${idx + 1}\`}
-                    </span>
-                  </td>
+        <div className="flex items-center gap-3 my-4">
+          <div className="h-[1px] flex-1 bg-white/10"></div>
+          <span className="font-mono text-[10px] text-[#8080a0] uppercase">Or Quick Launch with Callsign</span>
+          <div className="h-[1px] flex-1 bg-white/10"></div>
+        </div>
 
-                  <td className="py-3.5 px-3">
-                    <div className="flex items-center gap-2.5">
-                      <img
-                        src={entry.avatarUrl || \`https://api.dicebear.com/7.x/bottts/svg?seed=\${encodeURIComponent(entry.name || entry.username)}\`}
-                        alt="Pilot Avatar"
-                        className="w-7 h-7 rounded-full border border-white/20 bg-black/40 object-cover"
-                      />
-                      <span className="font-bold text-[#eef2ff]">{entry.name || entry.username}</span>
-                    </div>
-                  </td>
+        {/* Callsign / Direct Sign-In fallback */}
+        <div className="flex flex-col gap-3 text-left">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="font-mono text-[9px] text-[#8080a0] uppercase block mb-1">Google Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="email@gmail.com"
+                className="w-full bg-[#070714] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-[#eef2ff] focus:outline-none focus:border-[#00f0ff]"
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[9px] text-[#8080a0] uppercase block mb-1">Pilot Callsign</label>
+              <input
+                type="text"
+                value={pilotName}
+                onChange={(e) => setPilotName(e.target.value)}
+                placeholder="Aryan Sethiya"
+                className="w-full bg-[#070714] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-[#eef2ff] focus:outline-none focus:border-[#00f0ff]"
+              />
+            </div>
+          </div>
 
-                  <td className="py-3.5 px-3">
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#00f0ff]/10 border border-[#00f0ff]/20 text-[10px] text-[#00f0ff] font-bold">
-                      {entry.community}
-                    </span>
-                  </td>
-
-                  <td className="py-3.5 px-3 text-center text-[#eef2ff]">
-                    {entry.guessesCount}
-                  </td>
-
-                  <td className="py-3.5 px-3 text-right font-black text-sm text-[#00ff88]">
-                    {entry.score}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+          <button
+            id="launch-auth-btn"
+            onClick={handleDirectGoogleLogin}
+            disabled={loading}
+            className="w-full py-3 px-4 rounded-xl bg-[#00f0ff] text-[#05050c] font-mono text-xs font-bold uppercase tracking-wider active:scale-95 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all flex items-center justify-center gap-2"
+          >
+            <span>Launch as {pilotName || 'Pilot'}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );
 };
-`;
-
-fs.writeFileSync(path.join(root, 'src/components/SpaceStandingsView.tsx'), spaceStandingsCode.trim());
-console.log('✅ Applied clean SpaceStandingsView with only Global and User Custom Community Room!');
