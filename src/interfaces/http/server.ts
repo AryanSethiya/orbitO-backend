@@ -6,6 +6,7 @@ import { setupRateLimiter } from './plugins/rate-limiter.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { gameRoutes } from './routes/game.routes.js';
 import { leaderboardRoutes } from './routes/leaderboard.routes.js';
+import { authRoutes } from './routes/auth.routes.js';
 import { env } from '../../config/env.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -29,7 +30,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Core Plugins
   await server.register(cors, {
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   await server.register(sensible);
 
@@ -41,6 +42,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await server.register(healthRoutes, { prefix: '/api/v1' });
   await server.register(gameRoutes, { prefix: '/api/v1' });
   await server.register(leaderboardRoutes, { prefix: '/api/v1' });
+  await server.register(authRoutes, { prefix: '/api/v1' });
 
   return server;
 }

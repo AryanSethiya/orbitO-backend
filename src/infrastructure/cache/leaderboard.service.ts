@@ -1,96 +1,134 @@
+import { db } from '../database/index.js';
+import { gameSessions } from '../database/schema/game-sessions.js';
+import { users } from '../database/schema/users.js';
+import { dailyPuzzles } from '../database/schema/puzzles.js';
+import { eq, and, desc } from 'drizzle-orm';
 import { redis } from './redis.js';
 
 export interface LeaderboardEntry {
   rank: number;
   userId: string;
   username: string;
+  name?: string;
+  avatarUrl?: string;
+  community: string;
   score: number;
+  guessesCount: number;
+  hintsUsed: number;
+  completedAt?: Date | string | null;
 }
 
 export class LeaderboardService {
   /**
-   * Redis Key Formats:
-   * Global: orbito:leaderboard:global:YYYY-MM-DD
-   * Environment: orbito:leaderboard:env:{envId}:YYYY-MM-DD
-   */
-  private getGlobalKey(date: string): string {
-    return `orbito:leaderboard:global:${date}`;
-  }
-
-  private getEnvKey(envId: string, date: string): string {
-    return `orbito:leaderboard:env:${envId}:${date}`;
-  }
-
-  /**
    * Record a player's score to Redis Sorted Sets.
-   * Redis ZADD stores score as double, member as "userId:username".
    */
-  async recordScore(date: string, userId: string, username: string, score: number, envIds: string[] = []): Promise<void> {
-    const member = `${userId}:${username}`;
-
+  async recordScore(date: string, userId: string, username: string, score: number, community?: string): Promise<void> {
     try {
-      // 1. Global Leaderboard
-      const globalKey = this.getGlobalKey(date);
+      const globalKey = `orbito:leaderboard:global:${date}`;
+      const member = `${userId}:${username}`;
       await redis.zadd(globalKey, score, member);
-      // Expire after 30 days to save memory
       await redis.expire(globalKey, 30 * 24 * 60 * 60);
 
-      // 2. Private Environment Leaderboards
-      for (const envId of envIds) {
-        const envKey = this.getEnvKey(envId, date);
-        await redis.zadd(envKey, score, member);
-        await redis.expire(envKey, 30 * 24 * 60 * 60);
+      if (community) {
+        const commKey = `orbito:leaderboard:community:${encodeURIComponent(community)}:${date}`;
+        await redis.zadd(commKey, score, member);
+        await redis.expire(commKey, 30 * 24 * 60 * 60);
       }
     } catch {
-      // If Redis is temporarily unreachable, fail gracefully (PostgreSQL is source of truth)
+      // Redis optional cache
     }
   }
 
   /**
-   * Get top N players on the global leaderboard for a date.
+   * Fetch 100% real pilots from PostgreSQL database (no hardcoded/fake entries).
    */
-  async getGlobalLeaderboard(date: string, limit = 50): Promise<LeaderboardEntry[]> {
-    try {
-      const key = this.getGlobalKey(date);
-      // ZREVRANGE key 0 limit-1 WITHSCORES
-      const rawResults = await redis.zrevrange(key, 0, limit - 1, 'WITHSCORES');
-      const entries: LeaderboardEntry[] = [];
+  async getGlobalLeaderboard(dateStr: string, limit = 50, communityFilter?: string): Promise<LeaderboardEntry[]> {
+    // 1. Find puzzle for this date
+    const puzzleList = await db
+      .select({ id: dailyPuzzles.id })
+      .from(dailyPuzzles)
+      .where(eq(dailyPuzzles.date, dateStr))
+      .limit(1);
 
-      for (let i = 0; i < rawResults.length; i += 2) {
-        const member = rawResults[i];
-        const score = parseFloat(rawResults[i + 1]);
-        const [userId, username] = member.split(':');
-
-        entries.push({
-          rank: entries.length + 1,
-          userId,
-          username: username || 'Anonymous Orbit Player',
-          score,
-        });
-      }
-
-      return entries;
-    } catch {
+    if (puzzleList.length === 0) {
       return [];
     }
+
+    const puzzleId = puzzleList[0].id;
+
+    // 2. Query completed sessions with user profile
+    const query = db
+      .select({
+        sessionId: gameSessions.id,
+        userId: gameSessions.userId,
+        score: gameSessions.score,
+        guessesCount: gameSessions.guessesCount,
+        hintsUsed: gameSessions.hintsUsed,
+        completedAt: gameSessions.completedAt,
+        username: users.username,
+        name: users.name,
+        avatarUrl: users.avatarUrl,
+        community: users.community,
+      })
+      .from(gameSessions)
+      .innerJoin(users, eq(gameSessions.userId, users.id))
+      .where(
+        and(
+          eq(gameSessions.puzzleId, puzzleId),
+          eq(gameSessions.solved, true)
+        )
+      )
+      .orderBy(desc(gameSessions.score), gameSessions.completedAt)
+      .limit(limit);
+
+    const rows = await query;
+
+    // Filter by community if requested
+    const filteredRows = communityFilter && communityFilter !== 'All' && communityFilter !== 'Global'
+      ? rows.filter((r) => r.community?.toLowerCase() === communityFilter.toLowerCase())
+      : rows;
+
+    return filteredRows.map((row, index) => ({
+      rank: index + 1,
+      userId: row.userId,
+      username: row.name || row.username || 'Orbital Pilot',
+      name: row.name || row.username,
+      avatarUrl: row.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(row.username)}`,
+      community: row.community || 'Global Explorers',
+      score: row.score,
+      guessesCount: row.guessesCount,
+      hintsUsed: row.hintsUsed,
+      completedAt: row.completedAt,
+    }));
   }
 
   /**
-   * Get specific user's rank on global leaderboard.
+   * Get distinct active communities.
    */
-  async getUserRank(date: string, userId: string, username: string): Promise<number | null> {
+  async getActiveCommunities(): Promise<string[]> {
+    const defaultCommunities = [
+      'Global Explorers',
+      'Starfleet Academy',
+      'Nebula Squad',
+      'Cosmic Voyagers',
+      'Astrophysicists',
+    ];
+
     try {
-      const key = this.getGlobalKey(date);
-      const member = `${userId}:${username}`;
-      const zeroIndexedRank = await redis.zrevrank(key, member);
+      const distinctCommunities = await db
+        .selectDistinct({ community: users.community })
+        .from(users)
+        .where(eq(users.community, users.community));
 
-      if (zeroIndexedRank === null || zeroIndexedRank === undefined) {
-        return null;
+      const set = new Set(defaultCommunities);
+      for (const item of distinctCommunities) {
+        if (item.community && item.community.trim()) {
+          set.add(item.community.trim());
+        }
       }
-
-      return zeroIndexedRank + 1;
+      return Array.from(set);
     } catch {
-      return null;
+      return defaultCommunities;
     }
   }
 }
