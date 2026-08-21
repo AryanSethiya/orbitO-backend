@@ -259,4 +259,40 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
       community: updated[0]?.community || body.community,
     });
   });
+
+  /**
+   * PATCH /api/v1/auth/profile
+   * Update Pilot Callsign / Name
+   */
+  server.patch('/auth/profile', async (request, reply) => {
+    const schema = z.object({
+      userId: z.string().uuid(),
+      name: z.string().min(1).max(50),
+    });
+    const body = schema.parse(request.body);
+
+    const cleanUsername = body.name.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 24);
+    const updated = await db
+      .update(users)
+      .set({
+        name: body.name,
+        username: `${cleanUsername}_${Math.floor(100 + Math.random() * 900)}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, body.userId))
+      .returning();
+
+    const u = updated[0];
+    return reply.status(200).send({
+      success: true,
+      user: {
+        id: u?.id || body.userId,
+        email: u?.email,
+        username: u?.username,
+        name: u?.name || body.name,
+        avatarUrl: u?.avatarUrl,
+        community: u?.community || null,
+      },
+    });
+  });
 };
