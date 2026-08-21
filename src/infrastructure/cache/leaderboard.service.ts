@@ -123,32 +123,23 @@ export class LeaderboardService {
   }
 
   /**
-   * Get distinct active communities.
+   * Get distinct active user communities and custom rooms.
    */
   async getActiveCommunities(): Promise<string[]> {
-    const defaultCommunities = [
-      'Global Explorers',
-      'Starfleet Academy',
-      'Nebula Squad',
-      'Cosmic Voyagers',
-      'Astrophysicists',
-    ];
-
     try {
       const distinctCommunities = await db
         .selectDistinct({ community: users.community })
-        .from(users)
-        .where(eq(users.community, users.community));
+        .from(users);
 
-      const set = new Set(defaultCommunities);
+      const set = new Set<string>();
       for (const item of distinctCommunities) {
-        if (item.community && item.community.trim()) {
+        if (item.community && item.community.trim() && item.community !== 'Global Explorers') {
           set.add(item.community.trim());
         }
       }
       return Array.from(set);
     } catch {
-      return defaultCommunities;
+      return [];
     }
   }
 }
