@@ -18,6 +18,13 @@ export interface RequestHintResult {
   hintsUsed: number;
   remainingHints: number;
   penaltyCost: number;
+  revealedHints?: string[];
+  session?: {
+    id: string;
+    score: number;
+    hintsUsed: number;
+    revealedHints: string[];
+  };
 }
 
 export class RequestHintUseCase {
@@ -63,12 +70,23 @@ export class RequestHintUseCase {
     // Increment hint count in DB
     await this.sessionRepo.incrementHints(session.id);
 
+    const allHints = [puzzle.hint1, puzzle.hint2, puzzle.hint3];
+    const revealedHints = allHints.slice(0, nextHintNumber);
+    const newScore = Math.max(0, session.score - penaltyCost);
+
     return {
       hintNumber: nextHintNumber,
       hintText,
       hintsUsed: nextHintNumber,
       remainingHints: 3 - nextHintNumber,
       penaltyCost,
+      revealedHints,
+      session: {
+        id: session.id,
+        score: newScore,
+        hintsUsed: nextHintNumber,
+        revealedHints,
+      },
     };
   }
 }

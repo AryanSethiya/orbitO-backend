@@ -109,21 +109,20 @@ CRITICAL RULES:
 
   async generateRoast(data: RoastPromptData): Promise<string> {
     const journeySnippet = data.guessesJourney
-      .slice(0, 10)
-      .map((g) => `${g.word} (Rank #${g.rank})`)
+      .slice(0, 8)
+      .map((g) => `"${g.word}" (Rank #${g.rank})`)
       .join(' -> ');
 
-    const prompt = `You are an entertaining, witty game host for Orbito, a semantic word puzzle game.
-The player just solved the daily puzzle.
+    const prompt = `You are a ruthlessly savage, hilarious, sharp-tongued AI host for Orbito, a semantic word puzzle game.
+The player just completed today's orbit.
 
 Target Word: "${data.targetWord}"
-Total Guesses: ${data.guessesCount}
-Hints Used: ${data.hintsUsed}
+Total Probes: ${data.guessesCount}
+Hints Decrypted: ${data.hintsUsed}
 Final Score: ${data.finalScore} / 1000
-Player Path: ${journeySnippet}${data.guessesJourney.length > 10 ? ' ... and more' : ''}
-Tone Style: ${data.style || 'balanced'} (playful, witty, lightly teasing their bizarre guesses)
+Player Probe Trajectory: ${journeySnippet}${data.guessesJourney.length > 8 ? ' ... and more' : ''}
 
-Write a short, hilarious 2-3 sentence reaction / roast grounded in their actual guess trajectory. Keep it under 60 words.`;
+Deliver a single, brutally savage, witty, and hilarious roast (2-3 punchy sentences, under 50 words) mocking their chaotic logic and how lost they were before finally reaching "${data.targetWord}". Do not hold back, make it genuinely funny and sarcastic.`;
 
     try {
       const model = this.genAI.getGenerativeModel({ model: this.modelName });
@@ -131,7 +130,7 @@ Write a short, hilarious 2-3 sentence reaction / roast grounded in their actual 
       return response.response.text().trim();
     } catch (error) {
       console.warn('⚠️ Gemini roast generation fallback triggered:', error);
-      return new MockGeminiClient().generateRoast(data);
+      return `Took you ${data.guessesCount} chaotic probes and ${data.hintsUsed} desperate hints just to stumble into "${data.targetWord}"? Even an offline satellite navigates faster than that.`;
     }
   }
 }
