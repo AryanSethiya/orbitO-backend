@@ -1,3 +1,8 @@
+import dns from 'dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
 import { buildServer } from './interfaces/http/server.js';
 import { env } from './config/env.js';
 import { pool } from './infrastructure/database/index.js';
