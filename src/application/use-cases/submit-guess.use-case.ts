@@ -89,6 +89,7 @@ export class SubmitGuessUseCase {
     let semanticScore = 0.1;
     const isSolved = normalized === targetWordNorm;
 
+    let guessVec: number[] = [];
     if (isSolved) {
       rank = 1;
       semanticScore = 1.0;
@@ -105,10 +106,11 @@ export class SubmitGuessUseCase {
         semanticScore = rankedWord.semanticScore;
       } else {
         // Dynamic On-the-fly Gemini Semantic Vector Computation
-        const [guessVec, targetVec] = await Promise.all([
+        const [gVec, targetVec] = await Promise.all([
           this.geminiClient.generateEmbedding(normalized),
           this.geminiClient.generateEmbedding(targetWordNorm),
         ]);
+        guessVec = gVec;
 
         const rawSim = cosineSimilarity(guessVec, targetVec);
         semanticScore = Number(rawSim.toFixed(4));
@@ -124,7 +126,7 @@ export class SubmitGuessUseCase {
         .values({
           word: command.guess.trim(),
           normalizedWord: normalized,
-          embedding: [],
+          embedding: guessVec?.length === 768 ? guessVec : new Array(768).fill(0),
         })
         .onConflictDoNothing()
         .returning();

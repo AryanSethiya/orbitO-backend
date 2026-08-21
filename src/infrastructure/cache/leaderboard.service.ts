@@ -42,7 +42,7 @@ export class LeaderboardService {
   /**
    * Fetch 100% real pilots from PostgreSQL database (no hardcoded/fake entries).
    */
-  async getGlobalLeaderboard(dateStr: string, limit = 50, communityFilter?: string): Promise<LeaderboardEntry[]> {
+  async getGlobalLeaderboard(dateStr: string, limit = 50, communityFilter?: string, roomCode?: string): Promise<LeaderboardEntry[]> {
     // 1. Find puzzle for this date
     const puzzleList = await db
       .select({ id: dailyPuzzles.id })
@@ -55,6 +55,23 @@ export class LeaderboardService {
     }
 
     const puzzleId = puzzleList[0].id;
+
+    // If roomCode provided, resolve room member userIds
+    let roomUserIds: Set<string> | null = null;
+    if (roomCode && roomCode.trim()) {
+      try {
+        const { communityRooms, communityMembers } = await import('../database/schema/community-rooms.js');
+        const memberships = await db
+          .select({ userId: communityMembers.userId })
+          .from(communityMembers)
+          .innerJoin(communityRooms, eq(communityMembers.roomId, communityRooms.id))
+          .where(eq(communityRooms.code, roomCode.trim().toUpperCase()));
+        
+        roomUserIds = new Set(memberships.map(m => m.userId));
+      } catch (err) {
+        console.error('Error resolving room members for leaderboard:', err);
+      }
+    }
 
     // 2. Query completed sessions with user profile
     const query = db
@@ -83,10 +100,13 @@ export class LeaderboardService {
 
     const rows = await query;
 
-    // Filter by community if requested
-    const filteredRows = communityFilter && communityFilter !== 'All' && communityFilter !== 'Global'
-      ? rows.filter((r) => r.community?.toLowerCase() === communityFilter.toLowerCase())
-      : rows;
+    // Filter by roomCode or community if requested
+    let filteredRows = rows;
+    if (roomUserIds) {
+      filteredRows = rows.filter(r => roomUserIds!.has(r.userId));
+    } else if (communityFilter && communityFilter !== 'All' && communityFilter !== 'Global') {
+      filteredRows = rows.filter((r) => r.community?.toLowerCase() === communityFilter.toLowerCase());
+    }
 
     return filteredRows.map((row, index) => ({
       rank: index + 1,

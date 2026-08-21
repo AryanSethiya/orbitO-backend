@@ -57,8 +57,8 @@ export class GoogleGeminiClient implements IGeminiClient {
   }
 
   async generateHints(targetWord: string): Promise<[string, string, string]> {
-    const prompt = `You are a word puzzle game master for the game Orbito.
-The secret target word is: "${targetWord}".
+    const prompt = `You are a master semanticist for the conceptual word puzzle game Orbito.
+The secret target word is: "${targetWord}". Note: The word can be ANY concept from daily life, nature, objects, food, feelings, arts, science, or technology (not limited to space).
 
 Generate exactly 3 progressive hints for the players:
 - Hint 1: Broad thematic association (does not give much away).

@@ -6,3 +6,4 @@ export * from './game-sessions.js';
 export * from './guesses.js';
 export * from './environments.js';
 export * from './ai-roasts.js';
+export * from './community-rooms.js';

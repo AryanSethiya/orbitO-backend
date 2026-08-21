@@ -7,6 +7,7 @@ import { healthRoutes } from './routes/health.routes.js';
 import { gameRoutes } from './routes/game.routes.js';
 import { leaderboardRoutes } from './routes/leaderboard.routes.js';
 import { authRoutes } from './routes/auth.routes.js';
+import { communityRoutes } from './routes/community.routes.js';
 import { env } from '../../config/env.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -43,6 +44,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await server.register(gameRoutes, { prefix: '/api/v1' });
   await server.register(leaderboardRoutes, { prefix: '/api/v1' });
   await server.register(authRoutes, { prefix: '/api/v1' });
+  await server.register(communityRoutes, { prefix: '/api/v1' });
 
   return server;
 }
