@@ -49,55 +49,44 @@ async function runAutonomousTest() {
   await page.waitForSelector(inputSelector, { timeout: 15000 });
   await new Promise((r) => setTimeout(r, 1000));
 
-  // Submit First Probe "travel"
+  // Submit Probes
   console.log('🛸 Entering probe: "travel"...');
   await page.type(inputSelector, 'travel');
   await page.keyboard.press('Enter');
   await new Promise((r) => setTimeout(r, 2000));
 
-  // Submit Second Probe "flight"
-  console.log('🛸 Entering probe: "flight"...');
-  await page.click(inputSelector, { clickCount: 3 });
-  await page.keyboard.press('Backspace');
-  await page.type(inputSelector, 'flight');
-  await page.keyboard.press('Enter');
-  await new Promise((r) => setTimeout(r, 2000));
+  // Request Clue #1
+  console.log('💡 Clicking "Request Clue #1"...');
+  await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const hintBtn = buttons.find((b) => b.textContent?.includes('Request Clue') || b.textContent?.includes('Request Hint'));
+    if (hintBtn) (hintBtn as HTMLButtonElement).click();
+  });
+  await new Promise((r) => setTimeout(r, 2500));
 
   const screen2Path = path.join(artifactDir, 'screen2_daily_orbit.png');
   await page.screenshot({ path: screen2Path });
-  console.log('📸 Captured Screen 2: Daily Orbit with Trajectories ->', screen2Path);
+  console.log('📸 Captured Screen 2: Daily Orbit with Decrypted Clue ->', screen2Path);
 
-  // Submit Target Word "airport" to solve!
-  console.log('🎯 Entering center target word: "airport"...');
+  // Submit Target Word to solve!
+  const todayTarget = 'satellite'; // Today 2026-08-21
+  console.log(`🎯 Entering center target word: "${todayTarget}"...`);
   await page.click(inputSelector, { clickCount: 3 });
   await page.keyboard.press('Backspace');
-  await page.type(inputSelector, 'airport');
+  await page.type(inputSelector, todayTarget);
   await page.keyboard.press('Enter');
 
   // 3. Solved Screen
   console.log('🏆 Waiting for Orbit Solved Screen...');
   await page.waitForFunction(() => document.body.innerText.includes('SOLVED!'), { timeout: 15000 });
-  await new Promise((r) => setTimeout(r, 2000));
+  await new Promise((r) => setTimeout(r, 3000));
 
   const screen3Path = path.join(artifactDir, 'screen3_orbit_solved.png');
   await page.screenshot({ path: screen3Path });
   console.log('📸 Captured Screen 3: Orbit Solved! ->', screen3Path);
 
-  // 4. Standings Screen
-  console.log('🏆 Navigating to Space Standings...');
-  await page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const standingsBtn = buttons.find((b) => b.textContent?.includes('Standings') || b.textContent?.includes('Space Standings'));
-    if (standingsBtn) standingsBtn.click();
-  });
-  await new Promise((r) => setTimeout(r, 1500));
-
-  const screen4Path = path.join(artifactDir, 'screen4_space_standings.png');
-  await page.screenshot({ path: screen4Path });
-  console.log('📸 Captured Screen 4: Space Standings ->', screen4Path);
-
   await browser.close();
-  console.log('🎉 Full 4-screen Stitch test completed successfully!');
+  console.log('🎉 Automated test with live Hint Decryption completed successfully!');
 }
 
 runAutonomousTest().catch((err) => {
