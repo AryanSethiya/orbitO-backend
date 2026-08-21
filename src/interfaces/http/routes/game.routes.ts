@@ -23,12 +23,15 @@ const roastBodySchema = z.object({
   style: z.enum(['friendly', 'savage', 'hype', 'balanced']).optional().default('balanced'),
 });
 
+import { DailyPuzzleService } from '../../../infrastructure/scheduler/daily-puzzle.service.js';
+
 export const gameRoutes: FastifyPluginAsync = async (server: FastifyInstance) => {
   const sessionRepo = new GameSessionRepository();
   const puzzleRepo = new PuzzleRepository();
   const vocabRepo = new VocabularyRepository();
   const roastRepo = new AIRoastRepository();
   const geminiClient = createGeminiClient();
+  const dailyPuzzleService = new DailyPuzzleService(puzzleRepo, geminiClient);
 
   const submitGuessUseCase = new SubmitGuessUseCase(sessionRepo, puzzleRepo, vocabRepo);
   const requestHintUseCase = new RequestHintUseCase(sessionRepo, puzzleRepo);
@@ -43,7 +46,11 @@ export const gameRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
     const query = todayPuzzleQuerySchema.parse(request.query);
     const dateStr = query.date || new Date().toISOString().split('T')[0];
 
-    const puzzle = await puzzleRepo.findByDate(dateStr);
+    let puzzle = await puzzleRepo.findByDate(dateStr);
+    if (!puzzle) {
+      puzzle = await dailyPuzzleService.ensurePuzzleForDate(dateStr);
+    }
+
     if (!puzzle) {
       throw new PuzzleNotFoundError(dateStr);
     }
@@ -65,7 +72,11 @@ export const gameRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
     const body = startSessionSchema.parse(request.body || {});
     const dateStr = body.date || new Date().toISOString().split('T')[0];
 
-    const puzzle = await puzzleRepo.findByDate(dateStr);
+    let puzzle = await puzzleRepo.findByDate(dateStr);
+    if (!puzzle) {
+      puzzle = await dailyPuzzleService.ensurePuzzleForDate(dateStr);
+    }
+
     if (!puzzle) {
       throw new PuzzleNotFoundError(dateStr);
     }

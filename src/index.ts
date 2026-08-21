@@ -3,6 +3,8 @@ import { env } from './config/env.js';
 import { pool } from './infrastructure/database/index.js';
 import { redis } from './infrastructure/cache/redis.js';
 
+import { DailyPuzzleService } from './infrastructure/scheduler/daily-puzzle.service.js';
+
 async function start() {
   const server = await buildServer();
 
@@ -12,6 +14,10 @@ async function start() {
       host: env.HOST,
     });
     server.log.info(`🚀 Orbito Backend Engine running at ${address}`);
+
+    // Start automated daily puzzle scheduler and pre-provisioning
+    const puzzleService = new DailyPuzzleService();
+    puzzleService.startScheduler();
   } catch (err) {
     server.log.error(err);
     process.exit(1);
