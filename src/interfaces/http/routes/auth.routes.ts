@@ -89,8 +89,10 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
       const cleanUsername = name.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 24);
       const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
+      const isNewUser = !existing[0];
       let userRecord = existing[0];
-      if (!userRecord) {
+
+      if (isNewUser) {
         const inserted = await db
           .insert(users)
           .values({
@@ -144,6 +146,7 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
           community: userRecord.community || null,
         },
         token,
+        isNewUser,
       });
     } catch (error: any) {
       console.error('💥 /auth/google handler error:', error);
