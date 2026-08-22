@@ -107,7 +107,7 @@ export const authRoutes: FastifyPluginAsync = async (server: FastifyInstance) =>
         const updated = await db
           .update(users)
           .set({
-            name: name || userRecord.name,
+            name: userRecord.name || name,
             avatarUrl: picture || userRecord.avatarUrl,
             googleId: googleId || userRecord.googleId,
             updatedAt: new Date(),
