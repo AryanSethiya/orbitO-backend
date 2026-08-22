@@ -70,7 +70,7 @@ export class GenerateRoastUseCase {
 
     // 3. Generate grounded roast via Gemini
     const roastText = await this.geminiClient.generateRoast({
-      targetWord: puzzle?.targetWordId || 'Secret Center',
+      targetWord: puzzle?.targetWord || 'Secret Center',
       guessesCount: session.guessesCount,
       hintsUsed: session.hintsUsed,
       finalScore: session.score,
